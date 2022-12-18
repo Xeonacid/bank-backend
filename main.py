@@ -18,6 +18,8 @@ class RegisterForm(BaseModel):
     id: str
     name: str
     pubkey: str
+    signature: str
+    timestamp: int
 
 
 class UpdateBalanceForm(BaseModel):
@@ -35,16 +37,16 @@ class OrderForm(BaseModel):
 
 
 @app.post('/register')
-def register(form: RegisterForm):
-    errmsg = create_user(db, form.id, form.name, form.pubkey)
-    if errmsg is not None and errmsg != '':
+async def register(form: RegisterForm):
+    result, msg = await create_user(db, form.id, form.name, form.pubkey, form.signature, form.timestamp)
+    if not result:
         raise HTTPException(status_code=400, detail={
             'success': False,
-            'message': errmsg
+            'message': msg
         })
     return {
         'success': True,
-        'message': '注册成功'
+        'cert': msg
     }
 
 

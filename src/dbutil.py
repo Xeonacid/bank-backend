@@ -2,24 +2,32 @@ import asyncio
 from pymongo.database import Database
 
 from consts import *
+from src import ca
 
 lock = asyncio.Lock()
 
 
-def create_user(db: Database, id: str, name: str, pubkey: str) -> str | None:
+async def create_user(db: Database, id: str, name: str, pubkey: str, signature: str, timestamp: int) -> (bool, str):
     """
-    :return: 返回错误信息，为None则为成功
+    :return: (True, cert) if success, (False, errmsg) if failed
     """
     users = db[DB_COLL_USERS]
 
     async with lock:
         if user_exists(db, id):
-            return '用户已存在'
+            return False, '用户已存在'
+
+        result, msg = ca.register_request_cert(CA_UID_PREFIX + id, pubkey, signature, timestamp)
+        if not result:
+            return False, msg
+
         users.insert_one({
             DB_USER_ID: id,
             DB_USER_NAME: name,
             DB_USER_BALANCE: str(INITIAL_CARD_BALANCE)
         })
+
+        return True, msg
 
 
 def user_exists(db: Database, id: str):
