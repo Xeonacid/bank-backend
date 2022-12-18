@@ -1,6 +1,4 @@
-import json
 import logging
-from decimal import InvalidOperation
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -8,7 +6,7 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 
 from consts import *
-from src.dbutil import create_user, user_exists, update_balance, transfer
+from src.dbutil import create_user, user_exists, update_balance, transfer, get_user_info
 
 logging.basicConfig(level=logging.DEBUG)
 app = FastAPI()
@@ -27,13 +25,17 @@ class UpdateBalanceForm(BaseModel):
     delta: str
 
 
-class OrderForm(BaseModel):
+class Order(BaseModel):
     from_id: str
     to_id: str
     amount: str
+    comment: str
+
+
+class OrderForm(BaseModel):
+    order: Order
     signature: str
     cert: str
-    comment: str
 
 
 @app.post('/register')
@@ -76,6 +78,22 @@ async def balance_update(form: UpdateBalanceForm):
     return {
         'success': True,
         'message': '存/取款成功'
+    }
+
+
+@app.get('/balance')
+async def balance_get(id: str):
+    if not user_exists(db, id):
+        raise HTTPException(status_code=400, detail={
+            'success': False,
+            'message': '账户不存在'
+        })
+
+    info = get_user_info(db, id)
+
+    return {
+        'success': True,
+        'balance': info[DB_USER_BALANCE]
     }
 
 

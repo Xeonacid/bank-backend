@@ -19,7 +19,6 @@ def register_request_cert(uid: str, pubkey: str, signature: str, timestamp: int)
     r = requests.post(f"{CA_URL}/user?uid={uid}",
                       json={"sig": {"sig": signature, "timestamp": timestamp}, "pubkey": pubkey})
     resp = r.json()['data']
-    print(resp)
     if resp["result"] != 0:
         return False, resp["msg"]
     else:

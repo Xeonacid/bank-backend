@@ -71,3 +71,7 @@ async def transfer(db: Database, id_payer: str, id_receiver: str, amount: Decima
 
         _do_update_balance(db, id_payer, -amount)
         _do_update_balance(db, id_receiver, amount)
+
+
+def get_user_info(db: Database, id: str):
+    return db[DB_COLL_USERS].find_one({DB_USER_ID: id})

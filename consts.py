@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import *
 
 LISTEN_PORT = 8000
 
