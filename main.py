@@ -1,21 +1,27 @@
-import logging
-
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from pymongo import MongoClient
+from starlette.middleware.cors import CORSMiddleware
 
 from consts import *
 from src.dbutil import create_user, user_exists, update_balance, transfer, get_user_info
 
-logging.basicConfig(level=logging.DEBUG)
 app = FastAPI()
+
+origins = ["*"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"])
 
 
 class RegisterForm(BaseModel):
     id: str
     name: str
-    pubkey: str
+    pubKey: str
     signature: str
     timestamp: int
 
@@ -40,7 +46,7 @@ class OrderForm(BaseModel):
 
 @app.post('/register')
 async def register(form: RegisterForm):
-    result, msg = await create_user(db, form.id, form.name, form.pubkey, form.signature, form.timestamp)
+    result, msg = await create_user(db, form.id, form.name, form.pubKey, form.signature, form.timestamp)
     if not result:
         raise HTTPException(status_code=400, detail={
             'success': False,
@@ -100,7 +106,7 @@ async def balance_get(id: str):
 @app.post('/order')
 async def order(form: OrderForm):
     try:
-        if (amount := Decimal(form.amount)) <= 0:
+        if Decimal(form.order.amount) <= 0:
             raise HTTPException(status_code=400, detail={
                 'success': False,
                 'message': '金额必须大于0'
@@ -111,18 +117,20 @@ async def order(form: OrderForm):
             'message': '金额非法'
         })
 
-    if not user_exists(db, form.from_id) or not user_exists(db, form.to_id):
+    if not user_exists(db, form.order.from_id) or not user_exists(db, form.order.to_id):
         raise HTTPException(status_code=400, detail={
             'success': False,
             'message': '账户不存在'
         })
-    if form.from_id == form.to_id:
+    if form.order.from_id == form.order.to_id:
         raise HTTPException(status_code=400, detail={
             'success': False,
             'message': '不能给自己转账'
         })
 
-    errmsg = await transfer(db, form.from_id, form.to_id, amount, form.signature, form.cert, form.comment)
+    errmsg = await transfer(db, form.order.from_id, form.order.to_id, form.order.amount, form.order.comment,
+                            form.signature,
+                            form.cert)
 
     if errmsg is not None and errmsg != '':
         raise HTTPException(status_code=400, detail={

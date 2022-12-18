@@ -1,4 +1,5 @@
 import asyncio
+from cryptography import x509
 from pymongo.database import Database
 
 from consts import *
@@ -62,16 +63,19 @@ async def update_balance(db: Database, id: str, balance_delta: Decimal) -> str |
         _do_update_balance(db, id, balance_delta)
 
 
-async def transfer(db: Database, id_payer: str, id_receiver: str, amount: Decimal, signature: str, cert: str,
-                   comment: str) -> str | None:
-    payer_balance = Decimal(get_user_info(db, id_payer).get(DB_USER_BALANCE))
+async def transfer(db: Database, from_id: str, to_id: str, amount: str, comment: str, signature: str,
+                   cert: str) -> str | None:
+    cert = x509.load_pem_x509_certificate(cert.encode())
+    if ca.owner_of_cert(cert) != CA_UID_PREFIX + from_id:
+        return '证书颁发对象无效'
+    if not ca.verify_signature_with_cert(f'{from_id}||{to_id}||{amount}||{comment}', signature, cert):
+        return '签名无效'
+
+    amount = Decimal(amount)
     async with lock:
+        payer_balance = Decimal(get_user_info(db, from_id).get(DB_USER_BALANCE))
         if payer_balance < amount:
             return '付款人余额不足'
 
-        _do_update_balance(db, id_payer, -amount)
-        _do_update_balance(db, id_receiver, amount)
-
-
-def get_user_info(db: Database, id: str):
-    return db[DB_COLL_USERS].find_one({DB_USER_ID: id})
+        _do_update_balance(db, from_id, -amount)
+        _do_update_balance(db, to_id, amount)

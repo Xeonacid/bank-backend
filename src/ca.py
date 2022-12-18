@@ -1,6 +1,10 @@
+import base64
 import requests
+from cryptography import x509
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.x509 import Certificate
 
 from consts import *
 
@@ -23,3 +27,19 @@ def register_request_cert(uid: str, pubkey: str, signature: str, timestamp: int)
         return False, resp["msg"]
     else:
         return True, resp['cert']
+
+
+ca_pubkey = load_ECDSA_pubkey(open(CA_PUBKEY, 'r').read())
+
+
+def verify_signature_with_cert(msg: str, signature: str, cert: Certificate) -> bool:
+    pubkey = cert.public_key()
+    try:
+        pubkey.verify(base64.b64decode(signature), msg.encode(), ec.ECDSA(hashes.SHA256()))
+    except InvalidSignature:
+        return False
+    return True
+
+
+def owner_of_cert(cert: Certificate) -> str:
+    return cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
