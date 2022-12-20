@@ -17,5 +17,6 @@ DB_COLL_USERS = 'users'
 DB_USER_ID = 'id'
 DB_USER_NAME = 'name'
 DB_USER_BALANCE = 'balance'
+DB_USER_CERT = 'cert'
 
 CA_UID_PREFIX = 'BANK_'

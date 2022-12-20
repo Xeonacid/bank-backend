@@ -1,4 +1,6 @@
 import asyncio
+import base64
+
 from cryptography import x509
 from pymongo.database import Database
 
@@ -8,41 +10,42 @@ from src import ca
 lock = asyncio.Lock()
 
 
-async def create_user(db: Database, id: str, name: str, pubkey: str, signature: str, timestamp: int) -> (bool, str):
+async def create_user(db: Database, id: str, name: str, cert: str) -> str | None:
     """
-    :return: (True, cert) if success, (False, errmsg) if failed
+    :return: 返回错误信息，为None则为成功
     """
     users = db[DB_COLL_USERS]
 
     async with lock:
         if user_exists(db, id):
-            return False, '用户已存在'
+            return '账户已存在'
 
-        result, msg = ca.register_request_cert(CA_UID_PREFIX + id, pubkey, signature, timestamp)
-        if not result:
-            return False, msg
+        pubkey, common_name = ca.load_cert(cert)
+        if pubkey is None:
+            return '证书无效'
+
+        if common_name != CA_UID_PREFIX + id:
+            return '证书与卡号不匹配'
 
         users.insert_one({
             DB_USER_ID: id,
             DB_USER_NAME: name,
-            DB_USER_BALANCE: str(INITIAL_CARD_BALANCE)
+            DB_USER_BALANCE: str(INITIAL_CARD_BALANCE),
+            DB_USER_CERT: cert
         })
 
-        return True, msg
 
-
-def check_login(db: Database, id: str, pubkey: str, signature: str, timestamp: int) -> (bool, str):
+def check_login(db: Database, id: str, signature: str, timestamp: int) -> (bool, str):
     """
     :return: (True, '') if success, (False, errmsg) if failed
     """
-    msg = f'{id}||{pubkey}||{timestamp}||POST:/login'
+
+    msg = f'{id}||{timestamp}||POST:/login'
+    pubkey, common_name = ca.load_cert(get_user_info(db, id)[DB_USER_CERT])
+    signature = base64.b64decode(signature)
     if not ca.verify_signature_with_pubkey(msg, signature, pubkey):
         return False, '签名无效'
-    result, msg = ca.get_pubkey_by_uid(CA_UID_PREFIX + id)
-    if not result:
-        return False, msg
-    if msg != pubkey:
-        return False, '公钥无效'
+
     return True, ''
 
 
@@ -78,11 +81,7 @@ async def update_balance(db: Database, id: str, balance_delta: Decimal) -> str |
         _do_update_balance(db, id, balance_delta)
 
 
-async def transfer(db: Database, from_id: str, to_id: str, amount: str, comment: str, signature: str,
-                   cert: str) -> str | None:
-    cert = x509.load_pem_x509_certificate(cert.encode())
-    if ca.owner_of_cert(cert) != CA_UID_PREFIX + from_id:
-        return '证书颁发对象无效'
+async def transfer(db: Database, from_id: str, to_id: str, amount: str, comment: str, signature: str) -> str | None:
     if not ca.verify_signature_with_cert(f'{from_id}||{to_id}||{amount}||{comment}', signature, cert):
         return '签名无效'
 

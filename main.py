@@ -21,14 +21,11 @@ app.add_middleware(
 class RegisterForm(BaseModel):
     id: str
     name: str
-    pubKey: str
-    signature: str
-    timestamp: int
+    cert: str
 
 
 class LoginForm(BaseModel):
     id: str
-    pubKey: str
     signature: str
     timestamp: int
 
@@ -53,21 +50,28 @@ class OrderForm(BaseModel):
 
 @app.post('/register')
 async def register(form: RegisterForm):
-    result, msg = await create_user(db, form.id, form.name, form.pubKey, form.signature, form.timestamp)
-    if not result:
+    errmsg = await create_user(db, form.id, form.name, form.cert)
+    if errmsg is not None and errmsg != '':
         raise HTTPException(status_code=400, detail={
             'success': False,
-            'message': msg
+            'message': errmsg
         })
+
     return {
         'success': True,
-        'message': msg
+        'message': '转账成功'
     }
 
 
 @app.post('/login')
 def login(form: LoginForm):
-    result, msg = check_login(db, form.id, form.pubKey, form.signature, form.timestamp)
+    if not user_exists(db, form.id):
+        raise HTTPException(status_code=400, detail={
+            'success': False,
+            'message': '账户不存在'
+        })
+    
+    result, msg = check_login(db, form.id, form.signature, form.timestamp)
     if not result:
         raise HTTPException(status_code=400, detail={
             'success': False,

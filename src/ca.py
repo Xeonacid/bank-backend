@@ -2,6 +2,7 @@ import base64
 import requests
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
+from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.x509 import Certificate
@@ -45,23 +46,40 @@ def get_pubkey_by_uid(uid: str) -> (bool, str):
 ca_pubkey = load_ECDSA_pubkey(open(CA_PUBKEY, 'r').read())
 
 
-def verify_signature_with_cert(msg: str, signature: str, cert: Certificate) -> bool:
-    pubkey = cert.public_key()
+def verify_signature_with_cert(msg: str | bytes, signature: str | bytes, cert: Certificate) -> bool:
+    return verify_signature_with_pubkey(msg, signature, cert.public_key())
+
+
+def verify_signature_with_pubkey(msg: str | bytes, signature: str | bytes, pubkey: ec.EllipticCurvePublicKey) -> bool:
+    if isinstance(msg, str):
+        msg = msg.encode()
     try:
-        pubkey.verify(base64.b64decode(signature), msg.encode(), ec.ECDSA(hashes.SHA256()))
+        pubkey.verify(signature, msg, ec.ECDSA(hashes.SHA256()))
     except InvalidSignature:
         return False
     return True
 
 
-def verify_signature_with_pubkey(msg: str, signature: str, pubkey: str) -> bool:
-    pubkey = load_ECDSA_pubkey(pubkey)
-    try:
-        pubkey.verify(base64.b64decode(signature), msg.encode(), ec.ECDSA(hashes.SHA256()))
-    except InvalidSignature:
-        return False
-    return True
+def load_cert(cert: str) -> tuple[ec.EllipticCurvePublicKey | None, str]:
+    """
+    :return: (pubkey, common_name) if success, (None, errmsg) if failed
+    """
+    c = x509.load_pem_x509_certificate(cert.encode())
+    # first verify whether it is sign by CA
+    if not verify_signature_with_pubkey(c.tbs_certificate_bytes, c.signature, ca_pubkey):
+        return None, "证书签名无效"
 
+    # then check revoke list
+    r = requests.get(
+        f"{CA_URL}/revoke/check",
+        params={"digest": c.fingerprint(hashes.SHA256()).hex()}
+    )
+    resp = r.json()['data']
+    if resp["result"] == 0:
+        return None, "证书已被吊销"
 
-def owner_of_cert(cert: Certificate) -> str:
-    return cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
+    common_name = c.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+    if isinstance(common_name, bytes):
+        common_name = common_name.decode()
+    pubkey = c.public_key()
+    return pubkey, common_name
