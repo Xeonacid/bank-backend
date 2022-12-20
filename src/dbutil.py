@@ -31,6 +31,21 @@ async def create_user(db: Database, id: str, name: str, pubkey: str, signature: 
         return True, msg
 
 
+def check_login(db: Database, id: str, pubkey: str, signature: str, timestamp: int) -> (bool, str):
+    """
+    :return: (True, '') if success, (False, errmsg) if failed
+    """
+    msg = f'{id}||{pubkey}||{timestamp}||POST:/login'
+    if not ca.verify_signature_with_pubkey(msg, signature, pubkey):
+        return False, '签名无效'
+    result, msg = ca.get_pubkey_by_uid(CA_UID_PREFIX + id)
+    if not result:
+        return False, msg
+    if msg != pubkey:
+        return False, '公钥无效'
+    return True, ''
+
+
 def user_exists(db: Database, id: str):
     return db[DB_COLL_USERS].count_documents({DB_USER_ID: id}, limit=1)
 

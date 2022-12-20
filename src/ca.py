@@ -17,11 +17,12 @@ def load_ECDSA_pubkey(pubkey: str) -> ec.EllipticCurvePublicKey:
 
 
 def register_request_cert(uid: str, pubkey: str, signature: str, timestamp: int) -> (bool, str):
-    '''
+    """
     :return: (True, cert) if success, (False, errmsg) if failed
-    '''
+    """
     r = requests.post(f"{CA_URL}/user?uid={uid}",
                       json={"sig": {"sig": signature, "timestamp": timestamp}, "pubkey": pubkey})
+    print(r.request.url, r.request.body)
     resp = r.json()['data']
     if resp["result"] != 0:
         return False, resp["msg"]
@@ -29,11 +30,32 @@ def register_request_cert(uid: str, pubkey: str, signature: str, timestamp: int)
         return True, resp['cert']
 
 
+def get_pubkey_by_uid(uid: str) -> (bool, str):
+    """
+    :return: (True, pubkey) if success, (False, errmsg) if failed
+    """
+    r = requests.get(f"{CA_URL}/user?uid={uid}")
+    resp = r.json()['data']
+    if resp["result"] != 0:
+        return False, resp["msg"]
+    else:
+        return True, resp['users'][0]['pubkey']
+
+
 ca_pubkey = load_ECDSA_pubkey(open(CA_PUBKEY, 'r').read())
 
 
 def verify_signature_with_cert(msg: str, signature: str, cert: Certificate) -> bool:
     pubkey = cert.public_key()
+    try:
+        pubkey.verify(base64.b64decode(signature), msg.encode(), ec.ECDSA(hashes.SHA256()))
+    except InvalidSignature:
+        return False
+    return True
+
+
+def verify_signature_with_pubkey(msg: str, signature: str, pubkey: str) -> bool:
+    pubkey = load_ECDSA_pubkey(pubkey)
     try:
         pubkey.verify(base64.b64decode(signature), msg.encode(), ec.ECDSA(hashes.SHA256()))
     except InvalidSignature:

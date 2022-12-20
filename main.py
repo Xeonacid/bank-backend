@@ -5,7 +5,7 @@ from pymongo import MongoClient
 from starlette.middleware.cors import CORSMiddleware
 
 from consts import *
-from src.dbutil import create_user, user_exists, update_balance, transfer, get_user_info
+from src.dbutil import create_user, check_login, user_exists, update_balance, transfer, get_user_info
 
 app = FastAPI()
 
@@ -21,6 +21,13 @@ app.add_middleware(
 class RegisterForm(BaseModel):
     id: str
     name: str
+    pubKey: str
+    signature: str
+    timestamp: int
+
+
+class LoginForm(BaseModel):
+    id: str
     pubKey: str
     signature: str
     timestamp: int
@@ -54,7 +61,21 @@ async def register(form: RegisterForm):
         })
     return {
         'success': True,
-        'cert': msg
+        'message': msg
+    }
+
+
+@app.post('/login')
+def login(form: LoginForm):
+    result, msg = check_login(db, form.id, form.pubKey, form.signature, form.timestamp)
+    if not result:
+        raise HTTPException(status_code=400, detail={
+            'success': False,
+            'message': msg
+        })
+    return {
+        'success': True,
+        'message': msg
     }
 
 
@@ -99,7 +120,7 @@ async def balance_get(id: str):
 
     return {
         'success': True,
-        'balance': info[DB_USER_BALANCE]
+        'message': info[DB_USER_BALANCE]
     }
 
 

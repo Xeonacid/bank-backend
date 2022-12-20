@@ -5,7 +5,7 @@ LISTEN_PORT = 8000
 DB_HOST = '127.0.0.1'
 DB_PORT = 27017
 
-CA_URL = 'http://127.0.0.1:8080'
+CA_URL = 'http://127.0.0.1:8081'
 CA_PUBKEY = 'assets/ca_pub.pem'
 
 INITIAL_CARD_BALANCE = Decimal(0)  # Decimal('1145.14')
