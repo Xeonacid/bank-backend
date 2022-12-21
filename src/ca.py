@@ -1,4 +1,8 @@
 import base64
+import json
+import time
+from functools import wraps
+
 import requests
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
@@ -45,6 +49,7 @@ def get_pubkey_by_uid(uid: str) -> (bool, str):
 
 
 ca_pubkey = load_ECDSA_pubkey(open(CA_PUBKEY, 'r').read())
+bank_privkey = serialization.load_pem_private_key(open(BANK_PRIVKEY, 'rb').read(), password=None)
 
 
 def verify_signature_with_pubkey(msg: str | bytes, signature: bytes, pubkey: ec.EllipticCurvePublicKey) -> bool:
@@ -91,3 +96,12 @@ def load_cert(cert: str) -> tuple[ec.EllipticCurvePublicKey | None, str]:
         common_name = common_name.decode()
     pubkey = c.public_key()
     return pubkey, common_name
+
+
+def sign_with_bank(data):
+    data["timestamp"] = int(time.time() * 1000)
+    raw = json.dumps(data, sort_keys=True).encode()
+    return {
+        "data": data,
+        "sig": base64.b64encode(bank_privkey.sign(raw, ec.ECDSA(hashes.SHA256()))).decode()
+    }
