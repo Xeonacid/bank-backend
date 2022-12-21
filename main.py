@@ -40,6 +40,7 @@ class Order(BaseModel):
     to_id: str
     amount: str
     comment: str
+    timestamp: int
 
 
 class OrderForm(BaseModel):
@@ -154,6 +155,7 @@ async def order(form: OrderForm):
         })
 
     errmsg = await transfer(db, form.order.from_id, form.order.to_id, form.order.amount, form.order.comment,
+                            form.order.timestamp,
                             form.signature)
 
     if errmsg is not None and errmsg != '':

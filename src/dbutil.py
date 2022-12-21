@@ -29,7 +29,8 @@ async def create_user(db: Database, id: str, name: str, cert: str) -> str | None
             DB_USER_ID: id,
             DB_USER_NAME: name,
             DB_USER_BALANCE: str(INITIAL_CARD_BALANCE),
-            DB_USER_CERT: cert
+            DB_USER_CERT: cert,
+            DB_USER_LAST_ORDER_TIMESTAMP: 0
         })
 
 
@@ -77,8 +78,14 @@ async def update_balance(db: Database, id: str, balance_delta: Decimal) -> str |
         _do_update_balance(db, id, balance_delta)
 
 
-async def transfer(db: Database, from_id: str, to_id: str, amount: str, comment: str, signature: str) -> str | None:
-    msg = f'{from_id}||{to_id}||{amount}||{comment}'
+async def transfer(db: Database, from_id: str, to_id: str, amount: str, comment: str, timestamp: int,
+                   signature: str) -> str | None:
+    if get_user_info(db, from_id)[DB_USER_LAST_ORDER_TIMESTAMP] >= timestamp:
+        return '订单过期'
+
+    db[DB_COLL_USERS].update_one({DB_USER_ID: from_id}, {'$set': {DB_USER_LAST_ORDER_TIMESTAMP: timestamp}})
+
+    msg = f'{from_id}||{to_id}||{amount}||{comment}||{timestamp}'
     pubkey, common_name = ca.load_cert(get_user_info(db, from_id)[DB_USER_CERT])
     signature = base64.b64decode(signature)
     if not ca.verify_ieee_p1363_signature(msg, signature, pubkey):
