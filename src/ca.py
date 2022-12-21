@@ -2,6 +2,7 @@ import base64
 import requests
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization, hashes
@@ -46,11 +47,7 @@ def get_pubkey_by_uid(uid: str) -> (bool, str):
 ca_pubkey = load_ECDSA_pubkey(open(CA_PUBKEY, 'r').read())
 
 
-def verify_signature_with_cert(msg: str | bytes, signature: str | bytes, cert: Certificate) -> bool:
-    return verify_signature_with_pubkey(msg, signature, cert.public_key())
-
-
-def verify_signature_with_pubkey(msg: str | bytes, signature: str | bytes, pubkey: ec.EllipticCurvePublicKey) -> bool:
+def verify_signature_with_pubkey(msg: str | bytes, signature: bytes, pubkey: ec.EllipticCurvePublicKey) -> bool:
     if isinstance(msg, str):
         msg = msg.encode()
     try:
@@ -58,6 +55,17 @@ def verify_signature_with_pubkey(msg: str | bytes, signature: str | bytes, pubke
     except InvalidSignature:
         return False
     return True
+
+
+def ieee_p1363_to_der(sig: bytes) -> bytes:
+    return encode_dss_signature(
+        int.from_bytes(sig[:32], "big"),
+        int.from_bytes(sig[32:], "big"),
+    )
+
+
+def verify_ieee_p1363_signature(msg: str | bytes, signature: bytes, pubkey: ec.EllipticCurvePublicKey) -> bool:
+    return verify_signature_with_pubkey(msg, ieee_p1363_to_der(signature), pubkey)
 
 
 def load_cert(cert: str) -> tuple[ec.EllipticCurvePublicKey | None, str]:

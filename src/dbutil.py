@@ -1,7 +1,5 @@
 import asyncio
 import base64
-
-from cryptography import x509
 from pymongo.database import Database
 
 from consts import *
@@ -35,18 +33,16 @@ async def create_user(db: Database, id: str, name: str, cert: str) -> str | None
         })
 
 
-def check_login(db: Database, id: str, signature: str, timestamp: int) -> (bool, str):
+def check_login(db: Database, id: str, signature: str, timestamp: int) -> str | None:
     """
-    :return: (True, '') if success, (False, errmsg) if failed
+    :return: 返回错误信息，为None则为成功
     """
 
-    msg = f'{id}||{timestamp}||POST:/login'
+    msg = f'{timestamp}||{CA_UID_PREFIX + id}||POST:/login'
     pubkey, common_name = ca.load_cert(get_user_info(db, id)[DB_USER_CERT])
     signature = base64.b64decode(signature)
-    if not ca.verify_signature_with_pubkey(msg, signature, pubkey):
-        return False, '签名无效'
-
-    return True, ''
+    if not ca.verify_ieee_p1363_signature(msg, signature, pubkey):
+        return '签名无效'
 
 
 def user_exists(db: Database, id: str):
@@ -82,7 +78,10 @@ async def update_balance(db: Database, id: str, balance_delta: Decimal) -> str |
 
 
 async def transfer(db: Database, from_id: str, to_id: str, amount: str, comment: str, signature: str) -> str | None:
-    if not ca.verify_signature_with_cert(f'{from_id}||{to_id}||{amount}||{comment}', signature, cert):
+    msg = f'{from_id}||{to_id}||{amount}||{comment}'
+    pubkey, common_name = ca.load_cert(get_user_info(db, from_id)[DB_USER_CERT])
+    signature = base64.b64decode(signature)
+    if not ca.verify_ieee_p1363_signature(msg, signature, pubkey):
         return '签名无效'
 
     amount = Decimal(amount)

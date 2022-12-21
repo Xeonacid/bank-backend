@@ -45,7 +45,6 @@ class Order(BaseModel):
 class OrderForm(BaseModel):
     order: Order
     signature: str
-    cert: str
 
 
 @app.post('/register')
@@ -70,16 +69,17 @@ def login(form: LoginForm):
             'success': False,
             'message': '账户不存在'
         })
-    
-    result, msg = check_login(db, form.id, form.signature, form.timestamp)
-    if not result:
+
+    errmsg = check_login(db, form.id, form.signature, form.timestamp)
+    if errmsg is not None and errmsg != '':
         raise HTTPException(status_code=400, detail={
             'success': False,
-            'message': msg
+            'message': errmsg
         })
+
     return {
         'success': True,
-        'message': msg
+        'message': '登录成功'
     }
 
 
@@ -154,8 +154,7 @@ async def order(form: OrderForm):
         })
 
     errmsg = await transfer(db, form.order.from_id, form.order.to_id, form.order.amount, form.order.comment,
-                            form.signature,
-                            form.cert)
+                            form.signature)
 
     if errmsg is not None and errmsg != '':
         raise HTTPException(status_code=400, detail={
