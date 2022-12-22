@@ -8,6 +8,7 @@ DB_PORT = 27017
 CA_URL = 'http://127.0.0.1:49156'
 CA_PUBKEY = 'assets/ca_pub.pem'
 BANK_PRIVKEY = 'assets/bank.pem'
+BANK_PRIVKEY_PASSWORD = "BANK_PRIVKEY_PASSWORD"
 
 INITIAL_CARD_BALANCE = Decimal(0)  # Decimal('1145.14')
 
