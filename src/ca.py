@@ -2,6 +2,7 @@ import base64
 import json
 import time
 from functools import wraps
+from base64 import b64decode, b64encode
 
 import requests
 from cryptography import x509
@@ -9,10 +10,34 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.x509 import Certificate
 
 from consts import *
+
+PEM_PRIVKEY_HEADER = "-----BEGIN PRIVATE KEY-----"
+PEM_PRIVKEY_FOOTER = "-----END PRIVATE KEY-----"
+
+def xor_ECDSA_privkey(privkey: str, passwd: str) -> str:
+    st = privkey.find(PEM_PRIVKEY_HEADER) + len(PEM_PRIVKEY_HEADER)
+    ed = privkey.find(PEM_PRIVKEY_FOOTER)
+    encrypted = b64decode(privkey[st:ed])
+    xor_key = PBKDF2HMAC(
+        algorithm = hashes.SHA256(),
+        length = len(encrypted),
+        salt = b"\x8doSl\x13h\x15B2\x16\x8d.\xac-O\x96",
+        iterations = 1926,
+    ).derive(passwd.encode())
+    decrypted = b64encode(bytes(a ^ b for (a, b) in zip(encrypted, xor_key))).decode()
+    decrypted = '\n'.join(decrypted[i:i+64] for i in range(0, len(decrypted), 64))
+    return f"{PEM_PRIVKEY_HEADER}\n{decrypted}\n{PEM_PRIVKEY_FOOTER}"
+
+
+def load_ECDSA_privkey(privkey: str) -> ec.EllipticCurvePrivateKey:
+    user_privkey = serialization.load_pem_private_key(privkey.encode(), None)
+    if not isinstance(user_privkey, ec.EllipticCurvePrivateKey):
+        raise ValueError("privkey should be ECDSA.")
+    return user_privkey
 
 
 def load_ECDSA_pubkey(pubkey: str) -> ec.EllipticCurvePublicKey:
@@ -22,7 +47,7 @@ def load_ECDSA_pubkey(pubkey: str) -> ec.EllipticCurvePublicKey:
     return user_pubkey
 
 
-def register_request_cert(uid: str, pubkey: str, signature: str, timestamp: int) -> (bool, str):
+def register_request_cert(uid: str, pubkey: str, signature: str, timestamp: int) -> tuple[bool, str]:
     """
     :return: (True, cert) if success, (False, errmsg) if failed
     """
@@ -36,7 +61,7 @@ def register_request_cert(uid: str, pubkey: str, signature: str, timestamp: int)
         return True, resp['cert']
 
 
-def get_pubkey_by_uid(uid: str) -> (bool, str):
+def get_pubkey_by_uid(uid: str) -> tuple[bool, str]:
     """
     :return: (True, pubkey) if success, (False, errmsg) if failed
     """
@@ -49,7 +74,8 @@ def get_pubkey_by_uid(uid: str) -> (bool, str):
 
 
 ca_pubkey = load_ECDSA_pubkey(open(CA_PUBKEY, 'r').read())
-bank_privkey = serialization.load_pem_private_key(open(BANK_PRIVKEY, 'rb').read(), password=None)
+bank_privkey = load_ECDSA_privkey(
+    xor_ECDSA_privkey(open(BANK_PRIVKEY, 'r').read(), BANK_PRIVKEY_PASSWORD))
 
 
 def verify_signature_with_pubkey(msg: str | bytes, signature: bytes, pubkey: ec.EllipticCurvePublicKey) -> bool:
